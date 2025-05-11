@@ -156,7 +156,6 @@ realtime-chat/
 ### Go Backend with Gin (port 5002)
 - `GET /api/chat/token`: Get Stream Chat token
 - `POST /api/chat/messages`: Save chat messages
-- `GET /health`: Health check endpoint
 
 ## Why Go and Gin?
 We chose the Go language with the Gin framework for the chat backend because:

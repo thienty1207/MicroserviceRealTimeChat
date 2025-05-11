@@ -8,13 +8,7 @@ import (
 
 // SetupChatRoutes sets up all chat-related routes
 func SetupChatRoutes(r *gin.Engine) {
-	// Health check route (no auth required)
-	r.GET("/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{
-			"status":  "ok",
-			"message": "Go backend is running",
-		})
-	})
+	// Health check route has been removed as it's not essential for core functionality
 
 	chatRoutes := r.Group("/api/chat")
 
