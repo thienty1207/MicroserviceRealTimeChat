@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import {
   acceptFriendRequest,
+  cancelFriendRequest,
   getFriendRequests,
   getOutgoingFriendReqs,
   getRecommendedUsers,
@@ -9,7 +10,9 @@ import {
   sendFriendRequest,
 } from "../lib/api";
 import { Link } from "react-router";
-import { CheckCircleIcon, MapPinIcon, UserCheckIcon, UserPlusIcon, UsersIcon } from "lucide-react";
+import { CheckCircleIcon, MapPinIcon, MessageSquareIcon, UserCheckIcon, UserMinusIcon, UserPlusIcon, UsersIcon, XCircleIcon } from "lucide-react";
+import toast from "react-hot-toast";
+import socket from '../lib/socket';
 
 import { capitialize } from "../lib/utils";
 
@@ -19,7 +22,9 @@ import NoFriendsFound from "../components/NoFriendsFound";
 const HomePage = () => {
   const queryClient = useQueryClient();
   const [outgoingRequestsIds, setOutgoingRequestsIds] = useState(new Set());
+  const [outgoingRequestsMap, setOutgoingRequestsMap] = useState(new Map());
   const [incomingRequestsMap, setIncomingRequestsMap] = useState(new Map());
+  const [friendIds, setFriendIds] = useState(new Set());
 
   const { data: friends = [], isLoading: loadingFriends } = useQuery({
     queryKey: ["friends"],
@@ -41,9 +46,118 @@ const HomePage = () => {
     queryFn: getFriendRequests,
   });
 
+  // Listen for unfriend events directly on this page to ensure immediate UI updates
+  useEffect(() => {
+    // Avoid re-registering the callback on every render
+    const handleUnfriendedEvent = (data) => {
+      console.log("Unfriend event received in HomePage:", data);
+      
+      if (!data || !data.userId) {
+        console.error("Invalid unfriend data received:", data);
+        return;
+      }
+
+      try {
+        // Get the unfriended user's ID
+        const unfriendedUserId = data.userId;
+        
+        // Immediately update local state for immediate feedback
+        setFriendIds(prev => {
+          const newSet = new Set([...prev]);
+          newSet.delete(unfriendedUserId);
+          return newSet;
+        });
+        
+        setOutgoingRequestsIds(prev => {
+          const newSet = new Set([...prev]);
+          newSet.delete(unfriendedUserId);
+          return newSet;
+        });
+        
+        // Invalidate queries but don't force refreshes (SocketProvider will handle that)
+        queryClient.invalidateQueries(["friends"]);
+        queryClient.invalidateQueries(["users"]);
+        queryClient.invalidateQueries(["outgoingFriendReqs"]);
+      } catch (error) {
+        console.error("Error handling unfriend event in HomePage:", error);
+      }
+    };
+    
+    // Only register the event if socket exists
+    if (socket) {
+      console.log("HomePage: Registering unfriended event listener");
+      socket.on("unfriended", handleUnfriendedEvent);
+      
+      return () => {
+        console.log("HomePage: Removing unfriended event listener");
+        socket.off("unfriended", handleUnfriendedEvent);
+      };
+    }
+    
+    return () => {};
+  }, [queryClient]);
+
+  // Keep track of current friends' IDs
+  useEffect(() => {
+    const ids = new Set();
+    if (friends && friends.length > 0) {
+      friends.forEach(friend => {
+        ids.add(friend._id);
+      });
+      setFriendIds(ids);
+    }
+  }, [friends]);
+
   const { mutate: sendRequestMutation, isPending: isSendingRequest } = useMutation({
     mutationFn: sendFriendRequest,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["outgoingFriendReqs"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["outgoingFriendReqs"] });
+      toast.success("Friend request sent successfully");
+    },
+    onError: (error) => {
+      console.error("Error sending friend request:", error);
+      // Handle specific error messages from backend
+      const errorMessage = error.response?.data?.message || "Failed to send friend request";
+      
+      // If the user has already sent us a request, show a helpful message
+      if (errorMessage.includes("already sent you a friend request")) {
+        toast.error(errorMessage + ". Check your notifications to accept it!");
+      } else {
+        toast.error(errorMessage);
+      }
+    }
+  });
+
+  // Add mutation for canceling a friend request
+  const { mutate: cancelRequestMutation, isPending: isCancelingRequest } = useMutation({
+    mutationFn: cancelFriendRequest,
+    onSuccess: (_, requestId) => {
+      queryClient.invalidateQueries({ queryKey: ["outgoingFriendReqs"] });
+      
+      // Update local state immediately for better UX
+      setOutgoingRequestsIds(prev => {
+        const newSet = new Set([...prev]);
+        // Get the recipient ID from our map
+        const request = outgoingRequestsMap.get(requestId);
+        if (request) {
+          newSet.delete(request.recipient._id);
+        }
+        return newSet;
+      });
+      
+      // Also update the map
+      setOutgoingRequestsMap(prev => {
+        const newMap = new Map(prev);
+        newMap.delete(requestId);
+        return newMap;
+      });
+      
+      toast.success("Friend request canceled");
+    },
+    onError: (error) => {
+      console.error("Error canceling friend request:", error);
+      toast.error(error.response?.data?.message || "Failed to cancel friend request");
+    }
   });
 
   const { mutate: acceptRequestMutation, isPending: isAcceptingRequest } = useMutation({
@@ -56,11 +170,15 @@ const HomePage = () => {
 
   useEffect(() => {
     const outgoingIds = new Set();
+    const outgoingMap = new Map();
+    
     if (outgoingFriendReqs && outgoingFriendReqs.length > 0) {
       outgoingFriendReqs.forEach((req) => {
         outgoingIds.add(req.recipient._id);
+        outgoingMap.set(req._id, req); // Save the full request object with _id as key
       });
       setOutgoingRequestsIds(outgoingIds);
+      setOutgoingRequestsMap(outgoingMap);
     }
   }, [outgoingFriendReqs]);
 
@@ -73,6 +191,22 @@ const HomePage = () => {
       setIncomingRequestsMap(incomingReqsMap);
     }
   }, [friendRequests]);
+
+  // Filter out recommended users who are already friends
+  const filteredRecommendedUsers = useMemo(() => {
+    if (!recommendedUsers) return [];
+    return recommendedUsers.filter(user => !friendIds.has(user._id));
+  }, [recommendedUsers, friendIds]);
+
+  // Function to find the outgoing request ID for a user
+  const getOutgoingRequestId = useCallback((userId) => {
+    for (const [requestId, request] of outgoingRequestsMap.entries()) {
+      if (request.recipient._id === userId) {
+        return requestId;
+      }
+    }
+    return null;
+  }, [outgoingRequestsMap]);
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">
@@ -115,7 +249,7 @@ const HomePage = () => {
             <div className="flex justify-center py-12">
               <span className="loading loading-spinner loading-lg" />
             </div>
-          ) : recommendedUsers.length === 0 ? (
+          ) : filteredRecommendedUsers.length === 0 ? (
             <div className="card bg-base-200 p-6 text-center">
               <h3 className="font-semibold text-lg mb-2">No recommendations available</h3>
               <p className="text-base-content opacity-70">
@@ -124,10 +258,12 @@ const HomePage = () => {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {recommendedUsers.map((user) => {
+              {filteredRecommendedUsers.map((user) => {
                 const hasOutgoingRequest = outgoingRequestsIds.has(user._id);
+                const outgoingRequestId = hasOutgoingRequest ? getOutgoingRequestId(user._id) : null;
                 const hasIncomingRequest = incomingRequestsMap.has(user._id);
                 const incomingRequestId = hasIncomingRequest ? incomingRequestsMap.get(user._id) : null;
+                const isFriend = friendIds.has(user._id);
 
                 return (
                   <div
@@ -168,7 +304,12 @@ const HomePage = () => {
                       {user.bio && <p className="text-sm opacity-70">{user.bio}</p>}
 
                       {/* Action button */}
-                      {hasIncomingRequest ? (
+                      {isFriend ? (
+                        <Link to={`/chat/${user._id}`} className="btn btn-success w-full mt-2">
+                          <MessageSquareIcon className="size-4 mr-2" />
+                          Message
+                        </Link>
+                      ) : hasIncomingRequest ? (
                         <button
                           className="btn btn-success w-full mt-2"
                           onClick={() => acceptRequestMutation(incomingRequestId)}
@@ -177,25 +318,23 @@ const HomePage = () => {
                           <UserCheckIcon className="size-4 mr-2" />
                           Accept Invite
                         </button>
+                      ) : hasOutgoingRequest ? (
+                        <button
+                          className="btn btn-warning w-full mt-2"
+                          onClick={() => cancelRequestMutation(outgoingRequestId)}
+                          disabled={isCancelingRequest}
+                        >
+                          <XCircleIcon className="size-4 mr-2" />
+                          Cancel Request
+                        </button>
                       ) : (
                         <button
-                          className={`btn w-full mt-2 ${
-                            hasOutgoingRequest ? "btn-disabled" : "btn-primary"
-                          } `}
+                          className="btn btn-primary w-full mt-2"
                           onClick={() => sendRequestMutation(user._id)}
-                          disabled={hasOutgoingRequest || isSendingRequest}
+                          disabled={isSendingRequest}
                         >
-                          {hasOutgoingRequest ? (
-                            <>
-                              <CheckCircleIcon className="size-4 mr-2" />
-                              Request Sent
-                            </>
-                          ) : (
-                            <>
-                              <UserPlusIcon className="size-4 mr-2" />
-                              Send Friend Request
-                            </>
-                          )}
+                          <UserPlusIcon className="size-4 mr-2" />
+                          Send Friend Request
                         </button>
                       )}
                     </div>

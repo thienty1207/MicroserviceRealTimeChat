@@ -1,4 +1,5 @@
 import { axiosInstance, goAxiosInstance } from "./axios";
+import socket from './socket';
 
 export const signup = async (signupData) => {
   const response = await axiosInstance.post("/auth/signup", signupData);
@@ -47,6 +48,11 @@ export const login = async (loginData) => {
 };
 
 export const logout = async () => {
+  // Disconnect socket
+  if (socket.connected) {
+    socket.disconnect();
+  }
+
   // More aggressive cleanup of Stream data
   try {
     // Force disconnect any active Stream clients
@@ -175,6 +181,21 @@ export async function getFriendRequests() {
 
 export async function acceptFriendRequest(requestId) {
   const response = await axiosInstance.put(`/users/friend-request/${requestId}/accept`);
+  return response.data;
+}
+
+export async function rejectFriendRequest(requestId) {
+  const response = await axiosInstance.delete(`/users/friend-request/${requestId}/reject`);
+  return response.data;
+}
+
+export async function removeFriend(friendId) {
+  const response = await axiosInstance.delete(`/users/friends/${friendId}`);
+  return response.data;
+}
+
+export async function cancelFriendRequest(requestId) {
+  const response = await axiosInstance.delete(`/users/friend-request/${requestId}/cancel`);
   return response.data;
 }
 
