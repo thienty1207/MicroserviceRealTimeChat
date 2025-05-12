@@ -202,23 +202,55 @@ export async function cancelFriendRequest(requestId) {
 // Chat endpoints use the Go backend
 export async function getChatToken() {
   try {
-    // First try the Go backend
-    const response = await goAxiosInstance.get("/chat/token");
-    console.log("Successfully obtained chat token from Go backend");
-    return response.data;
-  } catch (error) {
-    console.error("Error getting token from Go backend:", error);
+    // Retry pattern for network issues
+    let retries = 3;
+    let lastError = null;
     
-    // If Go backend fails, try Express as fallback
-    try {
-      console.log("Trying Express backend as fallback for chat token");
-      const fallbackResponse = await axiosInstance.get("/chat/token");
-      console.log("Successfully obtained chat token from Express fallback");
-      return fallbackResponse.data;
-    } catch (fallbackError) {
-      console.error("Both backends failed to provide chat token:", fallbackError);
-      throw new Error("Failed to get chat token from both backends");
+    while (retries > 0) {
+      try {
+        console.log(`Fetching chat token, attempt ${4-retries}`);
+        // Corrected URL to match Go backend
+        const response = await goAxiosInstance.get("/chat/token"); 
+        console.log("Chat token fetched successfully");
+        return response.data;
+      } catch (error) {
+        lastError = error;
+        if (error.response && error.response.status === 401) {
+          // If unauthorized, no point in retrying
+          console.error("Unauthorized when fetching chat token:", error);
+          throw error;
+        }
+        
+        console.warn(`Chat token fetch failed, retries left: ${retries-1}`, error);
+        retries--;
+        
+        if (retries > 0) {
+          // Wait before retrying (500ms, 1s, 2s)
+          await new Promise(resolve => setTimeout(resolve, (4 - retries) * 500));
+        }
+      }
     }
+    
+    // If we get here, all retries failed
+    throw lastError || new Error("Failed to fetch chat token after multiple attempts");
+  } catch (error) {
+    console.error("Error fetching chat token:", error);
+    
+    // Check if this is an unauthorized error
+    if (error.response && error.response.status === 401) {
+      // Clear any stale tokens that might be causing issues
+      localStorage.removeItem('auth_token');
+      sessionStorage.removeItem('auth_token');
+      
+      // Force a page refresh to go to login if needed
+      if (window.location.pathname !== '/login') {
+        setTimeout(() => {
+          window.location.href = '/login?error=session_expired';
+        }, 100);
+      }
+    }
+    
+    throw error;
   }
 }
 
@@ -233,3 +265,59 @@ export async function getStreamToken() {
   const response = await axiosInstance.get("/chat/token");
   return response.data;
 }
+
+// Helper function to forcefully clean up Stream chat instances (can be called on navigation)
+export const abortChatConnection = () => {
+  console.log("Forcefully aborting and cleaning up all chat connections");
+  try {
+    // Clean up Stream client instances if they exist
+    if (window.StreamChat && window.StreamChat._instances) {
+      const instances = Object.values(window.StreamChat._instances);
+      console.log(`Found ${instances.length} Stream chat instances to clean up`);
+      
+      instances.forEach(client => {
+        try {
+          if (client && typeof client.disconnectUser === 'function') {
+            client.disconnectUser().catch(e => console.log("Error in disconnect:", e));
+            console.log("Forcefully disconnected a Stream client instance");
+          }
+        } catch (e) {
+          console.log("Error disconnecting client instance:", e);
+        }
+      });
+      
+      // Reset the instances
+      window.StreamChat._instances = {};
+    }
+    
+    // Clean up localStorage
+    Object.keys(localStorage).forEach(key => {
+      if (key.includes('stream-chat-') || key.includes('str:chat:')) {
+        try {
+          localStorage.removeItem(key);
+          console.log(`Removed problematic localStorage key: ${key}`);
+        } catch (e) {
+          console.log(`Error removing item: ${key}`, e);
+        }
+      }
+    });
+    
+    // Clean up IndexedDB if available
+    if (window.indexedDB) {
+      ['stream-chat-cache', 'stream-chat-persistence', 'stream-chat-storage'].forEach(dbName => {
+        try {
+          const req = window.indexedDB.deleteDatabase(dbName);
+          req.onsuccess = () => console.log(`Successfully deleted ${dbName}`);
+          req.onerror = (event) => console.log(`Error deleting ${dbName}:`, event);
+        } catch (e) {
+          console.log(`Error trying to delete ${dbName}:`, e);
+        }
+      });
+    }
+    
+    return true;
+  } catch (err) {
+    console.error("Error in aborting chat connection:", err);
+    return false;
+  }
+};

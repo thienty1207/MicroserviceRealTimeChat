@@ -1,4 +1,6 @@
 import { Navigate, Route, Routes } from "react-router";
+import { useEffect } from 'react';
+import { BrowserRouter as Router, useLocation } from 'react-router-dom';
 
 import HomePage from "./pages/HomePage.jsx";
 import SignUpPage from "./pages/SignUpPage.jsx";
@@ -15,6 +17,7 @@ import useAuthUser from "./hooks/useAuthUser.js";
 import Layout from "./components/Layout.jsx";
 import { useThemeStore } from "./store/useThemeStore.js";
 import SocketProvider from "./components/SocketProvider.jsx";
+import { abortChatConnection } from "./lib/api";
 
 const App = () => {
   const { isLoading, authUser } = useAuthUser();
@@ -82,6 +85,7 @@ const App = () => {
               element={
                 isAuthenticated && isOnboarded ? (
                   <Layout showSidebar={false}>
+                    <NavigationListener />
                     <ChatPage />
                   </Layout>
                 ) : (
@@ -157,4 +161,34 @@ const App = () => {
     </div>
   );
 };
+
+// Component to clean up Stream chat resources when navigation happens
+const NavigationListener = () => {
+  const location = useLocation();
+  
+  useEffect(() => {
+    // Handle navigation changes, especially when leaving chat pages
+    const cleanupStreamResources = () => {
+      // Only try to clean up if navigating away from chat pages
+      if (location.pathname.includes('/chat/')) {
+        console.log('Navigating away from chat page, cleaning up resources');
+        // Use the centralized cleanup function
+        abortChatConnection();
+      }
+    };
+    
+    cleanupStreamResources();
+    
+    // Return cleanup function in case component unmounts
+    return () => {
+      // Ensure cleanup when component unmounts
+      if (location.pathname.includes('/chat/')) {
+        abortChatConnection();
+      }
+    };
+  }, [location.pathname]); // Re-run when pathname changes
+  
+  return null; // This component doesn't render anything
+};
+
 export default App;
