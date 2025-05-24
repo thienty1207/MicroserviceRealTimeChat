@@ -1,0 +1,133 @@
+basePath: /api
+definitions:
+  models.ChatToken:
+    description: Chat authentication token response
+    properties:
+      token:
+        example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        type: string
+    type: object
+  models.Message:
+    description: Chat message model
+    properties:
+      content:
+        example: Hello, how are you?
+        type: string
+      createdAt:
+        example: "2023-12-01T10:00:00Z"
+        type: string
+      id:
+        example: 507f1f77bcf86cd799439011
+        type: string
+      roomId:
+        example: room123
+        type: string
+      userId:
+        example: 507f1f77bcf86cd799439012
+        type: string
+    type: object
+  models.MessageRequest:
+    description: Request payload for creating a chat message
+    properties:
+      content:
+        example: Hello, how are you?
+        type: string
+      roomId:
+        example: room123
+        type: string
+    required:
+    - content
+    - roomId
+    type: object
+host: localhost:5002
+info:
+  contact:
+    email: support@swagger.io
+    name: API Support
+    url: http://www.swagger.io/support
+  description: Go backend API for RealTimeChat application
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  termsOfService: http://swagger.io/terms/
+  title: RealTimeChat Go API
+  version: "1.0"
+paths:
+  /api/chat/messages:
+    post:
+      consumes:
+      - application/json
+      description: Save a new chat message to the database
+      parameters:
+      - description: Message data
+        in: body
+        name: message
+        required: true
+        schema:
+          $ref: '#/definitions/models.MessageRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Successfully saved message
+          schema:
+            $ref: '#/definitions/models.Message'
+        "400":
+          description: Bad request - Invalid message data
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized - User not authenticated
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Save a chat message
+      tags:
+      - Chat
+  /api/chat/token:
+    get:
+      consumes:
+      - application/json
+      description: Generate a token for authenticating with Stream Chat API
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully generated token
+          schema:
+            $ref: '#/definitions/models.ChatToken'
+        "401":
+          description: Unauthorized - User not authenticated
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get Stream Chat token
+      tags:
+      - Chat
+securityDefinitions:
+  BearerAuth:
+    description: Type "Bearer" followed by a space and JWT token.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

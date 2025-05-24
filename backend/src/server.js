@@ -11,6 +11,7 @@ import userRoutes from "./routes/user.route.js";
 import chatRoutes from "./routes/chat.route.js";
 
 import { connectDB } from "./lib/db.js";
+import { specs, swaggerUi } from "./lib/swagger.js";
 
 const app = express();
 const PORT = process.env.PORT;
@@ -66,6 +67,9 @@ app.use(
 app.use(express.json());
 app.use(cookieParser());
 
+// Swagger setup
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs));
+
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 // Chat endpoints have been moved to Go backend (http://localhost:5002/api/chat/*)
@@ -82,6 +86,7 @@ if (process.env.NODE_ENV === "production") {
 
 server.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
+  console.log(`Express Swagger documentation available at: http://localhost:${PORT}/api-docs`);
   console.log(`Note: Chat functionality is now handled by Go backend on port 5002`);
   connectDB();
 });

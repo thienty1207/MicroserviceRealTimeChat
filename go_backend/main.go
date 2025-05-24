@@ -1,3 +1,23 @@
+// @title RealTimeChat Go API
+// @version 1.0
+// @description Go backend API for RealTimeChat application
+// @termsOfService http://swagger.io/terms/
+
+// @contact.name API Support
+// @contact.url http://www.swagger.io/support
+// @contact.email support@swagger.io
+
+// @license.name MIT
+// @license.url https://opensource.org/licenses/MIT
+
+// @host localhost:5002
+// @BasePath /api
+
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+// @description Type "Bearer" followed by a space and JWT token.
+
 package main
 
 import (
@@ -11,6 +31,11 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/realtime-chat/go_backend/config"
 	"github.com/realtime-chat/go_backend/routes"
+
+	// Swagger imports
+	_ "github.com/realtime-chat/go_backend/docs" // Import generated docs
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
 func main() {
@@ -54,6 +79,9 @@ func main() {
 	// Set up routes
 	routes.SetupChatRoutes(r)
 
+	// Swagger endpoint
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+
 	// Get port from environment variable, default to 5002
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -62,6 +90,7 @@ func main() {
 
 	// Start server
 	fmt.Printf("Server running on port %s\n", port)
+	fmt.Printf("Swagger documentation available at: http://localhost:%s/swagger/index.html\n", port)
 	if err := r.Run(":" + port); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}

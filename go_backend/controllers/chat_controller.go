@@ -11,6 +11,16 @@ import (
 )
 
 // GetChatToken generates a token for chat services using Stream Chat API
+// @Summary Get Stream Chat token
+// @Description Generate a token for authenticating with Stream Chat API
+// @Tags Chat
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} models.ChatToken "Successfully generated token"
+// @Failure 401 {object} map[string]string "Unauthorized - User not authenticated"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /api/chat/token [get]
 func GetChatToken(c *gin.Context) {
 	// Get the user ID from the context (set by middleware)
 	userIDObj, exists := c.Get("userID")
@@ -38,7 +48,19 @@ func GetChatToken(c *gin.Context) {
 	c.JSON(http.StatusOK, models.ChatToken{Token: token})
 }
 
-// This function could handle saving messages to MongoDB
+// SaveMessage saves a chat message to the database
+// @Summary Save a chat message
+// @Description Save a new chat message to the database
+// @Tags Chat
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param message body models.MessageRequest true "Message data"
+// @Success 201 {object} models.Message "Successfully saved message"
+// @Failure 400 {object} map[string]string "Bad request - Invalid message data"
+// @Failure 401 {object} map[string]string "Unauthorized - User not authenticated"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /api/chat/messages [post]
 func SaveMessage(c *gin.Context) {
 	// Extract message data from request
 	var message models.Message

@@ -2,6 +2,28 @@ import User from "../models/User.js";
 import FriendRequest from "../models/FriendRequest.js";
 import { io, connectedUsers } from "../server.js";
 
+/**
+ * @swagger
+ * /users:
+ *   get:
+ *     summary: Get recommended users
+ *     tags: [Users]
+ *     security:
+ *       - cookieAuth: []
+ *     responses:
+ *       200:
+ *         description: List of recommended users
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/User'
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Internal server error
+ */
 export async function getRecommendedUsers(req, res) {
   try {
     const currentUserId = req.user.id;
@@ -21,6 +43,28 @@ export async function getRecommendedUsers(req, res) {
   }
 }
 
+/**
+ * @swagger
+ * /users/friends:
+ *   get:
+ *     summary: Get user's friends
+ *     tags: [Users]
+ *     security:
+ *       - cookieAuth: []
+ *     responses:
+ *       200:
+ *         description: List of user's friends
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/User'
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Internal server error
+ */
 export async function getMyFriends(req, res) {
   try {
     const user = await User.findById(req.user.id)
@@ -34,6 +78,35 @@ export async function getMyFriends(req, res) {
   }
 }
 
+/**
+ * @swagger
+ * /users/friend-request/{id}:
+ *   post:
+ *     summary: Send friend request
+ *     tags: [Users]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: User ID to send friend request to
+ *     responses:
+ *       201:
+ *         description: Friend request sent successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/FriendRequest'
+ *       400:
+ *         description: Bad request - Cannot send request to yourself or already friends
+ *       404:
+ *         description: User not found
+ *       500:
+ *         description: Internal server error
+ */
 export async function sendFriendRequest(req, res) {
   try {
     const myId = req.user.id;
@@ -114,6 +187,31 @@ export async function sendFriendRequest(req, res) {
   }
 }
 
+/**
+ * @swagger
+ * /users/friend-request/{id}/accept:
+ *   put:
+ *     summary: Accept friend request
+ *     tags: [Users]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Friend request ID
+ *     responses:
+ *       200:
+ *         description: Friend request accepted successfully
+ *       403:
+ *         description: Not authorized to accept this request
+ *       404:
+ *         description: Friend request not found
+ *       500:
+ *         description: Internal server error
+ */
 export async function acceptFriendRequest(req, res) {
   try {
     const { id: requestId } = req.params;
@@ -170,6 +268,33 @@ export async function acceptFriendRequest(req, res) {
   }
 }
 
+/**
+ * @swagger
+ * /users/friend-requests:
+ *   get:
+ *     summary: Get friend requests
+ *     tags: [Users]
+ *     security:
+ *       - cookieAuth: []
+ *     responses:
+ *       200:
+ *         description: Friend requests data
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 incomingReqs:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/FriendRequest'
+ *                 acceptedReqs:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/FriendRequest'
+ *       500:
+ *         description: Internal server error
+ */
 export async function getFriendRequests(req, res) {
   try {
     const incomingReqs = await FriendRequest.find({
@@ -189,6 +314,26 @@ export async function getFriendRequests(req, res) {
   }
 }
 
+/**
+ * @swagger
+ * /users/outgoing-friend-requests:
+ *   get:
+ *     summary: Get outgoing friend requests
+ *     tags: [Users]
+ *     security:
+ *       - cookieAuth: []
+ *     responses:
+ *       200:
+ *         description: List of outgoing friend requests
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/FriendRequest'
+ *       500:
+ *         description: Internal server error
+ */
 export async function getOutgoingFriendReqs(req, res) {
   try {
     const outgoingRequests = await FriendRequest.find({
@@ -203,6 +348,31 @@ export async function getOutgoingFriendReqs(req, res) {
   }
 }
 
+/**
+ * @swagger
+ * /users/friend-request/{id}/reject:
+ *   delete:
+ *     summary: Reject friend request
+ *     tags: [Users]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Friend request ID
+ *     responses:
+ *       200:
+ *         description: Friend request rejected successfully
+ *       403:
+ *         description: Not authorized to reject this request
+ *       404:
+ *         description: Friend request not found
+ *       500:
+ *         description: Internal server error
+ */
 export async function rejectFriendRequest(req, res) {
   try {
     const { id: requestId } = req.params;
@@ -236,6 +406,29 @@ export async function rejectFriendRequest(req, res) {
   }
 }
 
+/**
+ * @swagger
+ * /users/friends/{id}:
+ *   delete:
+ *     summary: Remove friend
+ *     tags: [Users]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Friend's user ID
+ *     responses:
+ *       200:
+ *         description: Friend removed successfully
+ *       404:
+ *         description: User not found
+ *       500:
+ *         description: Internal server error
+ */
 export async function removeFriend(req, res) {
   try {
     const currentUserId = req.user.id;
@@ -307,6 +500,31 @@ export async function removeFriend(req, res) {
   }
 }
 
+/**
+ * @swagger
+ * /users/friend-request/{id}/cancel:
+ *   delete:
+ *     summary: Cancel friend request
+ *     tags: [Users]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Friend request ID
+ *     responses:
+ *       200:
+ *         description: Friend request cancelled successfully
+ *       403:
+ *         description: Not authorized to cancel this request
+ *       404:
+ *         description: Friend request not found
+ *       500:
+ *         description: Internal server error
+ */
 export async function cancelFriendRequest(req, res) {
   try {
     const { id: requestId } = req.params;
@@ -351,3 +569,4 @@ export async function cancelFriendRequest(req, res) {
     res.status(500).json({ message: "Internal Server Error" });
   }
 }
+
